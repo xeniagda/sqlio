@@ -7,7 +7,7 @@ END;
 
 CREATE TABLE data_from(token TEXT, data TEXT, UNIQUE(token));
 
-CREATE TABLE data_cb(token TEXT, byte TEXT);
+CREATE TABLE data_cb(token TEXT, byte INTEGER);
 CREATE TRIGGER accept_data_new AFTER INSERT ON data_cb
 BEGIN
     -- insert into data_from if it's not there
