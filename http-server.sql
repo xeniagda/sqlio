@@ -1,13 +1,15 @@
 PRAGMA trusted_schema=1;
 .load target/debug/libsqlio
-.mode box
-.headers on
+
+.read log.sql
+INSERT INTO log_rules(module, min_level) VALUES ('http-server', 'debug');
 
 .read http-parse.sql
 
 CREATE TABLE connect_cb(token TEXT, remote_addr TEXT);
 CREATE TRIGGER new_connection AFTER INSERT ON connect_cb BEGIN
-    SELECT write_to_file('/dev/stdout', 'new connection [' || NEW.token || ']: ' || NEW.remote_addr || char(10));
+    INSERT INTO log(module, level, message) VALUES
+        ('http-server', 'info', 'new connection: ' || NEW.token);
 END;
 
 CREATE TABLE data_cb(token TEXT, byte INTEGER);
@@ -19,6 +21,8 @@ END;
 CREATE TRIGGER get_index AFTER INSERT ON processed_requests
     WHEN EXISTS (SELECT * FROM parsed_requests WHERE token = NEW.token AND method = 'GET' AND (path = '/index.html' OR path = '/'))
 BEGIN
+    INSERT INTO log(module, level, message) VALUES
+        ('http-server', 'info', 'return GET for /index.html for ' || NEW.token);
     WITH
         req(method, path, http_version, body) AS (SELECT method, path, http_version, body FROM parsed_requests WHERE token = NEW.token),
         html(data) AS (
@@ -33,3 +37,5 @@ BEGIN
 END;
 
 SELECT tcp_listen('0.0.0.0:1234', 'connect_cb', 'data_cb');
+
+INSERT INTO log(module, level, message) VALUES ('http-server', 'notice', 'starting server');

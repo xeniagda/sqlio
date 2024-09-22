@@ -3,8 +3,8 @@ PRAGMA trusted_schema=1;
 
 
 CREATE TABLE IF NOT EXISTS log
-    ( level TEXT DEFAULT 'debug' -- debug, info, notice, queer, trouble, urgent
-    , module TEXT
+    ( module TEXT
+    , level TEXT DEFAULT 'debug' -- debug, info, notice, queer, trouble, urgent
     , message TEXT NOT NULL
     , at DATETIME DEFAULT (datetime('now', 'subsec'))
     , CHECK (level = 'debug' OR level = 'info' OR level = 'notice' OR level = 'queer' OR level = 'trouble' OR level = 'unwanted' OR level = 'urgent')

@@ -1,3 +1,7 @@
+.read http-parse.sql
+.headers on
+.mode box
+
 INSERT INTO got_byte (token, byte)
     WITH RECURSIVE
         request(line) AS (VALUES
@@ -29,3 +33,5 @@ INSERT INTO got_byte (token, byte)
             SELECT SUBSTR(rest, 1, 1) AS ch, substr(rest, 2) AS rest FROM chars WHERE length(rest) > 0
         )
         SELECT '<post-request>' AS token, ch AS byte FROM chars WHERE ch IS NOT NULL;
+
+SELECT * FROM processed_requests JOIN parsed_requests USING (token) JOIN parsed_request_headers USING (token);

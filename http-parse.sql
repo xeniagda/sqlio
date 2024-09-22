@@ -1,4 +1,5 @@
-.load target/debug/libsqlio
+.read log.sql
+INSERT INTO log_rules(module, min_level) VALUES ('http-parse', 'notice');
 
 -- input table
 CREATE TABLE got_byte
@@ -46,7 +47,7 @@ CREATE TABLE request_state
 CREATE TRIGGER new_message AFTER INSERT ON got_byte
     WHEN NOT EXISTS(SELECT * FROM parsed_requests WHERE parsed_requests.token = NEW.token)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'got a new request!' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'notice', 'got a new message from ' || NEW.token);
 
     INSERT INTO parsed_requests (token, method, http_version) VALUES
         ( NEW.token
@@ -63,7 +64,8 @@ CREATE TRIGGER method AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'method')
      AND NEW.byte != ' '
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'method byte: ' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'debug', 'method byte from ' || NEW.token || ': ' || quote(NEW.byte));
+
     UPDATE parsed_requests
         SET method = method || NEW.byte
         WHERE token = NEW.token;
@@ -73,7 +75,7 @@ CREATE TRIGGER transition_to_path AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'method')
      AND NEW.byte == ' '
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'transitioning to path' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'info', 'transitioning ' || NEW.token || ' to path');
 
     UPDATE request_state
         SET state = 'path'
@@ -87,7 +89,7 @@ CREATE TRIGGER path AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'path')
      AND NEW.byte != ' '
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'path byte: ' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'debug', 'path byte from ' || NEW.token || ': ' || quote(NEW.byte));
 
     UPDATE parsed_requests
         SET path = path || NEW.byte
@@ -98,7 +100,7 @@ CREATE TRIGGER transition_to_version AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'path')
      AND NEW.byte == ' '
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'transitioning to version' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'info', 'transitioning ' || NEW.token || ' to version');
 
     UPDATE request_state
         SET state = 'version'
@@ -112,7 +114,8 @@ CREATE TRIGGER version AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'version')
      AND NEW.byte != char(13) AND NEW.byte != char(10)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'version byte: ' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'debug', 'version byte from ' || NEW.token || ': ' || quote(NEW.byte));
+
     UPDATE parsed_requests
         SET http_version = http_version || NEW.byte
         WHERE token = NEW.token;
@@ -122,7 +125,7 @@ CREATE TRIGGER transition_to_header_key AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND (state = 'version' OR state = 'header-value'))
      AND NEW.byte == char(10)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'transitioning to header key' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'info', 'transitioning ' || NEW.token || ' to header key');
 
     UPDATE request_state
         SET state = 'header-key'
@@ -134,7 +137,7 @@ CREATE TRIGGER header_key AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'header-key')
      AND NEW.byte != ':'
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'header key byte: ' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'debug', 'header key byte from ' || NEW.token || ': ' || quote(NEW.byte));
 
     UPDATE request_state
         SET current_header_key = current_header_key || NEW.byte
@@ -145,7 +148,7 @@ CREATE TRIGGER transition_to_header_space AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'header-key')
      AND NEW.byte == ':'
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'transitioning to header space' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'info', 'transitioning ' || NEW.token || ' to header space');
 
     UPDATE request_state
         SET state = 'header-space'
@@ -156,7 +159,7 @@ CREATE TRIGGER transition_to_header_value AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'header-space')
      AND NEW.byte == ' '
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'transitioning to header value' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'info', 'transitioning ' || NEW.token || ' to header value');
 
     INSERT INTO parsed_request_headers (token, header_key, header_value)
         SELECT token, current_header_key, ''
@@ -172,7 +175,7 @@ CREATE TRIGGER header_value AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'header-value')
      AND NEW.byte != char(13) AND NEW.byte != char(10)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'header value byte: ' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'debug', 'header value byte from ' || NEW.token || ': ' || quote(NEW.byte));
 
     UPDATE parsed_request_headers
         SET header_value = header_value || NEW.byte
@@ -186,7 +189,7 @@ CREATE TRIGGER no_body AFTER INSERT ON got_byte
      AND NOT EXISTS(SELECT * FROM parsed_request_headers WHERE parsed_request_headers.token = NEW.token AND header_key = 'Content-Length')
      AND NEW.byte == char(10)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'message terminated without body' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'notice', 'message from ' || NEW.token || ' terminated without body');
 
     UPDATE request_state
         SET state = 'done'
@@ -201,7 +204,7 @@ CREATE TRIGGER transition_to_body AFTER INSERT ON got_byte
      AND EXISTS(SELECT * FROM parsed_request_headers WHERE parsed_request_headers.token = NEW.token AND header_key = 'Content-Length')
      AND NEW.byte == char(10)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'transitioning to body' || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'info', 'transitioning ' || NEW.token || ' to body');
 
     UPDATE request_state
         SET state = 'body'
@@ -217,7 +220,7 @@ END;
 CREATE TRIGGER body AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'body' AND body_bytes_left > 1)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'body byte:' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'debug', 'body byte from ' || NEW.token || ': ' || quote(NEW.byte));
 
     UPDATE request_state
         SET body_bytes_left = body_bytes_left - 1
@@ -231,7 +234,7 @@ END;
 CREATE TRIGGER body_end AFTER INSERT ON got_byte
     WHEN EXISTS(SELECT * FROM request_state WHERE request_state.token = NEW.token AND state = 'body' AND body_bytes_left == 1)
 BEGIN
-    -- SELECT write_to_file('/dev/stdout', 'message terminated with last body byte:' || NEW.byte || char(10));
+    INSERT INTO log(module, level, message) VALUES ('http-parse', 'notice', 'message from ' || NEW.token || ' ended with body');
 
     UPDATE parsed_requests
         SET body = body || NEW.byte
@@ -240,5 +243,3 @@ BEGIN
     INSERT INTO processed_requests ( token ) VALUES
         ( NEW.token );
 END;
-
--- SELECT write_to_file('/dev/stdout', 'http parser loaded');
