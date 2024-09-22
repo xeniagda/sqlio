@@ -28,6 +28,8 @@ pub unsafe extern "C" fn sqlite3_extension_init(
 }
 
 fn extension_init(db: Connection) -> Result<bool> {
+    assert!(unsafe { ffi::sqlite3_threadsafe() } == 1);
+
     db.create_scalar_function(
         "sqlio_version",
         0,

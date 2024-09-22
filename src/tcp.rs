@@ -59,6 +59,7 @@ pub fn start_listen(
     let connw = ConnectionThreadWrapper::from_connection(conn);
 
     thread::spawn(move || {
+        thread::sleep(std::time::Duration::from_millis(1));
         let conn = connw.to_connection();
         let mut rng = thread_rng();
         let mut connect_cb_stmt = conn.prepare(
